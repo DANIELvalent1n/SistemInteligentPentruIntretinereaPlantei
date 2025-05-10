@@ -7,15 +7,15 @@
 //defines
 AM2302::AM2302_Sensor am2302{0U};
 DFRobot_DF1201S DFPlayer;
-WiFiConnectionHandler WiFiConnection(SSID, PASS);
 
 //macros
 #define MAX_WATER_LEVEL 44
 #define DF1201S_SERIAL Serial1
 
 //variables and buffers
-const char SSID[] = "307B"; //Orange-yHhQGT-2G
-const char PASS[] = "Frigider007"; //xEbd9uP7G3K5Z59Gfk
+const char SSID[] = "Orange-yHhQGT-2G"; //Orange-yHhQGT-2G //307B
+const char PASS[] = "xEbd9uP7G3K5Z59Gfk"; //xEbd9uP7G3K5Z59Gfk //Frigider007
+WiFiConnectionHandler WiFiConnection(SSID, PASS);
 float temperature;
 float humidity;
 int musicControl;
@@ -25,7 +25,7 @@ int dryThreshold = 0;
 int wetThreshold = 1023;
 int soilMoistureLevel;  
 bool pumpControl = 0;
-bool stateMoisture = 0;
+bool stateMoisture = 1;
 unsigned long pumpStartTime = 0;
 unsigned long totalPumpTime = 0;
 
@@ -82,9 +82,10 @@ void setMoistureLevels() {
 
 //This function get the moisture humidity level
 void getMoistureLevel(){
-  soilMoistureLevel = analogRead(SoilSensorPin)/10;
-  // Serial.print("Moisture: "); Serial.println(soilMoistureLevel);
-  // delay(2000);
+  int rawValue = analogRead(SoilSensorPin);
+  soilMoistureLevel = map(rawValue, 800, 200, 0, 100);  // 0 = ud, 100 = uscat
+  Serial.print("Moisture: "); Serial.println(soilMoistureLevel);
+  delay(1000);
 }
 
 //This function is been executed once per device's runnig time
@@ -118,7 +119,7 @@ void setup() {
   ArduinoCloud.addProperty(musicControl, WRITE, ON_CHANGE, setMusicChanges);
   ArduinoCloud.addProperty(temperature, READ, ON_CHANGE, NULL);
   ArduinoCloud.addProperty(humidity, READ, ON_CHANGE, NULL);
-  ArduinoCloud.addProperty(soilMoistureLevel, READ, ON_CHANGE, NULL);
+  ArduinoCloud.addProperty(soilMoistureLevel, READ, ON_CHANGE, getMoistureLevel);
   ArduinoCloud.addProperty(dryThreshold, WRITE, ON_CHANGE, setMoistureLevels);
 }
 
@@ -128,41 +129,23 @@ void loop() {
     if (am2302.read() == 0) {
       temperature = am2302.get_Temperature();
       humidity = am2302.get_Humidity();
-      // Serial.print("Temp: "); Serial.println(temperature);
-      // Serial.print("Humidity: "); Serial.println(humidity);
+      Serial.print("Temp: "); Serial.println(temperature);
+      Serial.print("Humidity: "); Serial.println(humidity);
     }
 
     getMoistureLevel();
 
     if (soilMoistureLevel < dryThreshold)
     {
+      pumpStartTime = millis();
       digitalWrite(PumpPin, HIGH);
-      if(stateMoisture == 0)
-      {
-        stateMoisture = 1;
-        pumpStartTime = millis();
-      }
-      
-      if((millis() - (pumpStartTime + totalPumpTime)/1000) > MAX_WATER_LEVEL)
-      {
-        digitalWrite(PumpPin, LOW);
-        Serial.println("Recipient GOL in timpul udarii! Necesar reumplere imediata!");
-      }
-    }
-    else if (soilMoistureLevel >= wetThreshold && stateMoisture == 1)
-    {
+      dealy(2000);
       digitalWrite(PumpPin, LOW);
-      stateMoisture = 0;
-      if (pumpStartTime > 0) 
+      totalPumpTime += (millis() - pumpStartTime);
+      if(totalPumpTime/1000 > MAX_WATER_LEVEL)
       {
-        totalPumpTime += (millis() - pumpStartTime);
-        pumpStartTime = 0;
-      }
-      if (totalPumpTime/1000 >= MAX_WATER_LEVEL) 
-      {
-        Serial.println(totalPumpTime);
+        Serial.println("Nu mai este apa! Te rog umple tot recipientul pentru apa!");
         totalPumpTime = 0;
-        Serial.println("Recipient GOL!");
       }
     }
 }
